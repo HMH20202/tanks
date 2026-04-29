@@ -2,6 +2,12 @@ import UIKit
 import SpriteKit
 
 class GameViewController: UIViewController {
+    
+    // ADDED FIX: This tells the app to load an SKView from the very beginning
+    override func loadView() {
+        self.view = SKView()
+    }
+    
     override func viewDidLoad() {
         super.viewDidLoad()
 
