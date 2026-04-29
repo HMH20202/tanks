@@ -9,42 +9,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
-
-      - name: Create Project Configuration
-        run: |
-          cat << 'EOF' > project.yml
-          name: SnakeAI
-          targets:
-            SnakeAI:
-              type: application
-              platform: iOS
-              deploymentTarget: "15.0"
-              sources:
-                - AppDelegate.swift
-                - GameViewController.swift
-                - GameScene.swift
-              settings:
-                GENERATE_INFOPLIST_FILE: YES
-                PRODUCT_BUNDLE_IDENTIFIER: com.snakeai.game
-                CODE_SIGN_IDENTITY: ""
-                CODE_SIGNING_REQUIRED: NO
-                CODE_SIGNING_ALLOWED: NO
-          EOF
-
-      - name: Generate Xcode Project
-        run: |
-          xcodegen generate
-          echo "Project generated successfully!"
-          ls -la
-
       - name: Build unsigned IPA
         run: |
-          # Build the app using the newly generated project
-          xcodebuild build -project "SnakeAI.xcodeproj" -scheme "SnakeAI" -configuration Release -arch arm64 -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -derivedDataPath build
+          # 1. Find the exact name of the Xcode project file you uploaded
+          PROJECT_FILE=$(ls -d *.xcodeproj | head -n 1)
+          echo "==> FOUND PROJECT: $PROJECT_FILE"
           
-          # Package the built app into an .ipa file
+          # 2. Force Xcode to wake up and generate user schemes
+          xcodebuild -project "$PROJECT_FILE" -list > /dev/null 2>&1 || true
+          
+          # 3. Dynamically extract the exact scheme name
+          SCHEME=$(xcodebuild -project "$PROJECT_FILE" -list | awk '/Schemes:/{flag=1; next} flag&&NF{print $0}' | head -n 1 | xargs)
+          echo "==> DETECTED SCHEME: '$SCHEME' <=="
+          
+          # 4. Build the app using your project
+          xcodebuild build -project "$PROJECT_FILE" -scheme "$SCHEME" -configuration Release -arch arm64 -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -derivedDataPath build
+          
+          # 5. Package the built app into an .ipa file
           mkdir -p Payload
           cp -r build/Build/Products/Release-iphoneos/*.app Payload/
           zip -r App.ipa Payload
