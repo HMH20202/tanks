@@ -1,36 +1,56 @@
-name: iOS Build SnakeAI
-
+name: Build Native iOS IPA
 on:
-  push:
-    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: macos-latest
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Build iOS App
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Create Project Configuration
         run: |
-          xcodebuild \
-          -project SnakeAI.xcodeproj \
-          -scheme SnakeAI \
-          -sdk iphoneos \
-          -configuration Release \
-          clean build \
-          CODE_SIGNING_ALLOWED=NO
-
-      - name: Find app
-        run: |
-          mkdir Payload
-          APP=$(find ~/Library/Developer/Xcode/DerivedData -name "*.app" | head -n 1)
-          cp -r "$APP" Payload/
-
-      - name: Create IPA
-        run: zip -r SnakeAI.ipa Payload
-
-      - uses: actions/upload-artifact@v4
-        with:
+          cat << 'EOF' > project.yml
           name: SnakeAI
-          path: SnakeAI.ipa
+          targets:
+            SnakeAI:
+              type: application
+              platform: iOS
+              deploymentTarget: "15.0"
+              sources:
+                - AppDelegate.swift
+                - GameViewController.swift
+                - GameScene.swift
+              settings:
+                GENERATE_INFOPLIST_FILE: YES
+                PRODUCT_BUNDLE_IDENTIFIER: com.snakeai.game
+                CODE_SIGN_IDENTITY: ""
+                CODE_SIGNING_REQUIRED: NO
+                CODE_SIGNING_ALLOWED: NO
+          EOF
+
+      - name: Generate Xcode Project
+        run: |
+          xcodegen generate
+          echo "Project generated successfully!"
+          ls -la
+
+      - name: Build unsigned IPA
+        run: |
+          # Build the app using the newly generated project
+          xcodebuild build -project "SnakeAI.xcodeproj" -scheme "SnakeAI" -configuration Release -arch arm64 -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -derivedDataPath build
+          
+          # Package the built app into an .ipa file
+          mkdir -p Payload
+          cp -r build/Build/Products/Release-iphoneos/*.app Payload/
+          zip -r App.ipa Payload
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SnakeAI-IPA
+          path: App.ipa
